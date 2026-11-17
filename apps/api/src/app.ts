@@ -13,6 +13,9 @@ import {
 import { createErrorHandler, NotFoundError } from './errors.js';
 import { isMongoConnected } from './db.js';
 import { isRedisConnected } from './redis.js';
+import { createGithubWebhookRouter } from './github/webhook-router.js';
+import type { ReviewQueue } from './github/queue.js';
+import type { GithubClient } from './github/client.js';
 
 export interface AppDependencies {
   config?: Config;
@@ -22,6 +25,8 @@ export interface AppDependencies {
   rateLimitMax?: number;
   rateLimitWindowMs?: number;
   configureRoutes?: (app: Express) => void;
+  reviewQueue?: ReviewQueue;
+  githubClient?: GithubClient;
 }
 
 const getEffectiveConfig = (injected?: Config): Config => {
@@ -62,13 +67,26 @@ export const createApp = (deps: AppDependencies = {}): Express => {
       credentials: true,
     }),
   );
-  app.use(express.json({ limit: config.BODY_LIMIT }));
 
   // 2. Request ID & Request Logging
   app.use(requestIdMiddleware);
   if (config.NODE_ENV !== 'test') {
     app.use(createRequestLoggingMiddleware(logger));
   }
+
+  // 3. GitHub Webhook Route with RAW body parser (BEFORE express.json)
+  app.use(
+    '/webhooks/github',
+    express.raw({ type: '*/*', limit: config.BODY_LIMIT }),
+    createGithubWebhookRouter({
+      webhookSecret: config.GITHUB_WEBHOOK_SECRET,
+      logger,
+      reviewQueue: deps.reviewQueue,
+    }),
+  );
+
+  // 4. JSON Body Parser for all other endpoints
+  app.use(express.json({ limit: config.BODY_LIMIT }));
 
   // 3. Global Rate Limiter
   const rateLimitWindowMs = deps.rateLimitWindowMs ?? config.RATE_LIMIT_WINDOW_MS;
@@ -150,3 +168,5 @@ export const createApp = (deps: AppDependencies = {}): Express => {
 
 export const app = createApp();
 export { logger } from './logger.js';
+export * from './models/index.js';
+export * from './github/index.js';

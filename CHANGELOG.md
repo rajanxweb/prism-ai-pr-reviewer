@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- GitHub App integration for `apps/api`:
+  - RAW request body handler on `POST /webhooks/github` ensuring the incoming body is not parsed before signature verification.
+  - Webhook signature verification (`X-Hub-Signature-256`) using timing-safe comparison (`crypto.timingSafeEqual`), rejecting invalid or missing signatures with 401 and logging without leaking payloads.
+  - Delivery deduplication using `X-GitHub-Delivery` header recorded in MongoDB `WebhookDelivery` collection with a 7-day TTL index; replayed deliveries return 200 and do nothing.
+  - Webhook event handlers for `pull_request` (`opened`, `synchronize`, `reopened`), `installation` (`created`, `deleted`), and `installation_repositories` (`added`, `removed`), ignoring unhandled events and actions with HTTP 202.
+  - Asynchronous review job stub (`enqueueReview`) interface and stub implementation responding in milliseconds.
+  - `GithubClient` interface and `OctokitGithubClient` implementation using GitHub App authentication with installation token caching and configurable expiry buffer (tested with fake clock).
+  - Mongoose models with proper indexes: `Installation`, `Repository`, `PullRequest`, `WebhookDelivery`.
+  - Comprehensive guide in `docs/GITHUB_APP_SETUP.md` covering GitHub App registration, permission matrix, event subscriptions, private key handling, and local forwarding via `smee.io`.
 - `apps/api` foundation:
   - Zod-validated environment configuration module (`apps/api/src/config.ts`) failing fast with human-readable error listing missing variables.
   - Pino logger (`apps/api/src/logger.ts`) with request-id middleware (`x-request-id`), child logger per request, and automatic redaction of authorization headers, tokens, keys, and secrets.
